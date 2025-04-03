@@ -23,8 +23,12 @@
 
 import torch
 
+# 球谐函数系数，用于计算不同阶数的球谐函数值
+# C0是0阶球谐函数的系数
 C0 = 0.28209479177387814
+# C1是1阶球谐函数的系数
 C1 = 0.4886025119029199
+# C2是2阶球谐函数的系数数组
 C2 = [
     1.0925484305920792,
     -1.0925484305920792,
@@ -32,6 +36,7 @@ C2 = [
     -1.0925484305920792,
     0.5462742152960396
 ]
+# C3是3阶球谐函数的系数数组
 C3 = [
     -0.5900435899266435,
     2.890611442640554,
@@ -41,6 +46,7 @@ C3 = [
     1.445305721320277,
     -0.5900435899266435
 ]
+# C4是4阶球谐函数的系数数组
 C4 = [
     2.5033429417967046,
     -1.7701307697799304,
@@ -56,32 +62,38 @@ C4 = [
 
 def eval_sh(deg, sh, dirs):
     """
-    Evaluate spherical harmonics at unit directions
-    using hardcoded SH polynomials.
-    Works with torch/np/jnp.
-    ... Can be 0 or more batch dimensions.
-    Args:
-        deg: int SH deg. Currently, 0-3 supported
-        sh: jnp.ndarray SH coeffs [..., C, (deg + 1) ** 2]
-        dirs: jnp.ndarray unit directions [..., 3]
-    Returns:
-        [..., C]
+    在单位方向上评估球谐函数，使用硬编码的球谐多项式计算。
+    可用于torch/np/jnp等框架。
+    ... 可以是0个或多个批处理维度。
+    
+    参数:
+        deg: 整数，表示球谐函数的阶数。目前支持0-3阶。
+        sh: 形状为[..., C, (deg + 1) ** 2]的球谐系数数组
+        dirs: 形状为[..., 3]的单位方向向量数组
+        
+    返回:
+        形状为[..., C]的数组，表示每个通道的球谐函数值
     """
     assert deg <= 4 and deg >= 0
     coeff = (deg + 1) ** 2
     assert sh.shape[-1] >= coeff
 
+    # 计算0阶球谐函数
     result = C0 * sh[..., 0]
     if deg > 0:
+        # 提取方向向量的xyz分量
         x, y, z = dirs[..., 0:1], dirs[..., 1:2], dirs[..., 2:3]
+        # 计算1阶球谐函数
         result = (result -
                 C1 * y * sh[..., 1] +
                 C1 * z * sh[..., 2] -
                 C1 * x * sh[..., 3])
 
         if deg > 1:
+            # 计算平方和乘积项
             xx, yy, zz = x * x, y * y, z * z
             xy, yz, xz = x * y, y * z, x * z
+            # 计算2阶球谐函数
             result = (result +
                     C2[0] * xy * sh[..., 4] +
                     C2[1] * yz * sh[..., 5] +
@@ -90,6 +102,7 @@ def eval_sh(deg, sh, dirs):
                     C2[4] * (xx - yy) * sh[..., 8])
 
             if deg > 2:
+                # 计算3阶球谐函数
                 result = (result +
                 C3[0] * y * (3 * xx - yy) * sh[..., 9] +
                 C3[1] * xy * z * sh[..., 10] +
@@ -100,6 +113,7 @@ def eval_sh(deg, sh, dirs):
                 C3[6] * x * (xx - 3 * yy) * sh[..., 15])
 
                 if deg > 3:
+                    # 计算4阶球谐函数
                     result = (result + C4[0] * xy * (xx - yy) * sh[..., 16] +
                             C4[1] * yz * (3 * xx - yy) * sh[..., 17] +
                             C4[2] * xy * (7 * zz - 1) * sh[..., 18] +
@@ -111,8 +125,10 @@ def eval_sh(deg, sh, dirs):
                             C4[8] * (xx * (xx - 3 * yy) - yy * (3 * xx - yy)) * sh[..., 24])
     return result
 
+# 将RGB值转换为球谐系数
 def RGB2SH(rgb):
     return (rgb - 0.5) / C0
 
+# 将球谐系数转换为RGB值
 def SH2RGB(sh):
     return sh * C0 + 0.5

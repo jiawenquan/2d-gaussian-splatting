@@ -29,13 +29,19 @@
 # THE SOFTWARE.
 # ----------------------------------------------------------------------------
 
-# some global parameters - do not modify
+# 全局参数定义 - 请勿修改
+# 这个字典定义了不同场景的距离阈值tau (单位: 米)
+# 距离阈值tau是评估时使用的关键参数，决定了点云间的匹配距离阈值
+# 每个场景根据其尺寸特点有不同的适合阈值：
+# - 较大的场景(如Church、Courthouse)使用较大的tau值(0.025)
+# - 中等场景(如Barn、Meetingroom)使用中等tau值(0.01)
+# - 较小或细节丰富的场景(如Caterpillar、Ignatius、Truck)使用较小的tau值(0.003-0.005)
 scenes_tau_dict = {
-    "Barn": 0.01,
-    "Caterpillar": 0.005,
-    "Church": 0.025,
-    "Courthouse": 0.025,
-    "Ignatius": 0.003,
-    "Meetingroom": 0.01,
-    "Truck": 0.005,
+    "Barn": 0.01,        # 谷仓场景，中等尺寸，tau=0.01
+    "Caterpillar": 0.005, # 毛毛虫场景，细节丰富，tau=0.005
+    "Church": 0.025,     # 教堂场景，大型建筑，tau=0.025
+    "Courthouse": 0.025, # 法院场景，大型建筑，tau=0.025
+    "Ignatius": 0.003,   # Ignatius雕像，细节非常丰富，tau=0.003
+    "Meetingroom": 0.01, # 会议室场景，中等大小，tau=0.01
+    "Truck": 0.005,      # 卡车场景，细节丰富，tau=0.005
 }

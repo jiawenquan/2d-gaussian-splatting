@@ -15,17 +15,20 @@ from datetime import datetime
 import numpy as np
 import random
 
+# Sigmoid的逆函数，用于将(0,1)范围的值转换为(-∞,+∞)范围
 def inverse_sigmoid(x):
     return torch.log(x/(1-x))
 
+# 将PIL图像转换为torch张量，调整图像大小并进行归一化处理
 def PILtoTorch(pil_image, resolution):
     resized_image_PIL = pil_image.resize(resolution)
     resized_image = torch.from_numpy(np.array(resized_image_PIL)) / 255.0
     if len(resized_image.shape) == 3:
-        return resized_image.permute(2, 0, 1)
+        return resized_image.permute(2, 0, 1)  # 将HWC转换为CHW格式
     else:
-        return resized_image.unsqueeze(dim=-1).permute(2, 0, 1)
+        return resized_image.unsqueeze(dim=-1).permute(2, 0, 1)  # 将灰度图像转换为单通道
 
+# 指数学习率衰减函数，用于优化过程中学习率的调整
 def get_expon_lr_func(
     lr_init, lr_final, lr_delay_steps=0, lr_delay_mult=1.0, max_steps=1000000
 ):
@@ -61,6 +64,7 @@ def get_expon_lr_func(
 
     return helper
 
+# 提取下三角矩阵中的元素，用于处理协方差矩阵或不确定性矩阵
 def strip_lowerdiag(L):
     uncertainty = torch.zeros((L.shape[0], 6), dtype=torch.float, device="cuda")
 
@@ -72,21 +76,26 @@ def strip_lowerdiag(L):
     uncertainty[:, 5] = L[:, 2, 2]
     return uncertainty
 
+# 提取对称矩阵中的元素，实际是调用strip_lowerdiag
 def strip_symmetric(sym):
     return strip_lowerdiag(sym)
 
+# 根据四元数构建旋转矩阵
 def build_rotation(r):
+    # 归一化四元数
     norm = torch.sqrt(r[:,0]*r[:,0] + r[:,1]*r[:,1] + r[:,2]*r[:,2] + r[:,3]*r[:,3])
-
     q = r / norm[:, None]
 
+    # 初始化旋转矩阵
     R = torch.zeros((q.size(0), 3, 3), device='cuda')
 
-    r = q[:, 0]
-    x = q[:, 1]
-    y = q[:, 2]
-    z = q[:, 3]
+    # 提取四元数的各个分量
+    r = q[:, 0]  # 实部
+    x = q[:, 1]  # i分量
+    y = q[:, 2]  # j分量
+    z = q[:, 3]  # k分量
 
+    # 根据四元数公式构建旋转矩阵
     R[:, 0, 0] = 1 - 2 * (y*y + z*z)
     R[:, 0, 1] = 2 * (x*y - r*z)
     R[:, 0, 2] = 2 * (x*z + r*y)
@@ -98,17 +107,21 @@ def build_rotation(r):
     R[:, 2, 2] = 1 - 2 * (x*x + y*y)
     return R
 
+# 构建缩放旋转矩阵，结合了缩放和旋转
 def build_scaling_rotation(s, r):
     L = torch.zeros((s.shape[0], 3, 3), dtype=torch.float, device="cuda")
-    R = build_rotation(r)
+    R = build_rotation(r)  # 构建旋转矩阵
 
+    # 设置缩放因子
     L[:,0,0] = s[:,0]
     L[:,1,1] = s[:,1]
     L[:,2,2] = s[:,2]
 
+    # 将旋转应用于缩放矩阵
     L = R @ L
     return L
 
+# 为程序执行创建安全状态，包括设置输出重定向和随机种子
 def safe_state(silent):
     old_f = sys.stdout
     class F:
@@ -125,8 +138,10 @@ def safe_state(silent):
         def flush(self):
             old_f.flush()
 
+    # 重定向标准输出
     sys.stdout = F(silent)
 
+    # 设置随机种子以确保结果可重现
     random.seed(0)
     np.random.seed(0)
     torch.manual_seed(0)
@@ -135,24 +150,26 @@ def safe_state(silent):
 
 
 
+# 从方向向量批量创建旋转矩阵
 def create_rotation_matrix_from_direction_vector_batch(direction_vectors):
-    # Normalize the batch of direction vectors
+    # 归一化方向向量
     direction_vectors = direction_vectors / torch.norm(direction_vectors, dim=-1, keepdim=True)
-    # Create a batch of arbitrary vectors that are not collinear with the direction vectors
+    # 创建与方向向量不共线的任意向量
     v1 = torch.tensor([1.0, 0.0, 0.0], dtype=torch.float32).to(direction_vectors.device).expand(direction_vectors.shape[0], -1).clone()
     is_collinear = torch.all(torch.abs(direction_vectors - v1) < 1e-5, dim=-1)
     v1[is_collinear] = torch.tensor([0.0, 1.0, 0.0], dtype=torch.float32).to(direction_vectors.device)
 
-    # Calculate the first orthogonal vectors
+    # 计算第一个正交向量
     v1 = torch.cross(direction_vectors, v1)
     v1 = v1 / (torch.norm(v1, dim=-1, keepdim=True))
-    # Calculate the second orthogonal vectors by taking the cross product
+    # 计算第二个正交向量（通过叉积）
     v2 = torch.cross(direction_vectors, v1)
     v2 = v2 / (torch.norm(v2, dim=-1, keepdim=True))
-    # Create the batch of rotation matrices with the direction vectors as the last columns
+    # 创建旋转矩阵，以方向向量作为最后一列
     rotation_matrices = torch.stack((v1, v2, direction_vectors), dim=-1)
     return rotation_matrices
 
+# 将法线转换为旋转的函数注释（未实现）
 # from kornia.geometry import conversions
 # def normal_to_rotation(normals):
 #     rotations = create_rotation_matrix_from_direction_vector_batch(normals)
@@ -160,6 +177,7 @@ def create_rotation_matrix_from_direction_vector_batch(direction_vectors):
 #     return rotations
 
 
+# 生成带有颜色映射的图像
 def colormap(img, cmap='jet'):
     import matplotlib.pyplot as plt
     W, H = img.shape[:2]
